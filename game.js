@@ -2,36 +2,90 @@ const WORLD_SIZE = 3000;
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const MAX_SPEED = 6;
+const A = 15;                       // distance from car center to front axle
+const B = 15;                       // distance from car center to rear axle
+const INERTIA = 225;                // how hard the car is to rotate
+const CORNERING = 0.25;             // how quickly tires build up sideways force
+const MAX_TIRE = 0.3;               // the grip limit of one tire
+let surfaceGRIP = 0.7;                // 1 = tarmac, 0.7 = gravel, 0.5 = mud, 0.3 = ice
 
-const car = { x: 1500, y:1500, angle: 0, speed: 0 };
+const car = { x: 1500, y:1500, angle: 0, vx: 0, vy: 0, omega: 0, steerAngle: 0 };
 const keys = {};
 let state = "menu";
 const maps = ["Gravel Valley", "Forest Run", "Desert Dash"];
 let selectedMap = 0;
 
 
-window.addEventListener("keydown", (e) => keys[e.key] = true);
+window.addEventListener("keydown", (e) => {{
+    if (e.key === " ") e.preventDefault();  // prevent page scrolling when pressing space
+    keys[e.key] = true;
+}});
 window.addEventListener("keyup", (e) => keys[e.key] = false);
 
 function updateRace() {
-    if (keys["ArrowUp"]) car.speed += 0.2;
-    if (keys["ArrowDown"]) car.speed -= 0.2;
-    car.speed *= 0.98; // friction
+    const fx = Math.cos(car.angle);
+    const fy = Math.sin(car.angle);
+    const rx = -fy;
+    const ry = fx;
 
-    if (Math.abs(car.speed) > 0.5) {   //can only turn while moving
-        if (keys["ArrowLeft"]) car.angle -= 0.04;
-        if (keys["ArrowRight"]) car.angle += 0.04;
+    const vf = car.vx * fx + car.vy * fy; // forward velocity
+    const vr = car.vx * rx + car.vy * ry; // rightward velocity
+    
+    const maxSteer = 0.6 / (1 + Math.abs(vf) * 0.3);
+    let target = 0;
+    if (keys["ArrowLeft"]) target = -maxSteer;
+    if (keys["ArrowRight"]) target = maxSteer;
+    car.steerAngle += (target - car.steerAngle) * 0.2;
+
+
+    const slideFront = vr + car.omega * A;
+    const slideRear = vr - car.omega * B;
+
+    const handbreak = keys[" "];
+    const maxFront = MAX_TIRE * surfaceGRIP;
+    let maxRear = MAX_TIRE * surfaceGRIP;
+    if (handbreak) maxRear *= 0.3;
+    else if (keys["ArrowUp"]) maxRear *= 0.85;  // power takes rear grip away
+
+    //tire forces: push against sliding, but never more than the limit
+    let forceFront = -CORNERING * (slideFront - vf * car.steerAngle);
+    let forceRear = -CORNERING * slideRear;
+    forceFront = Math.max(-maxFront, Math.min(maxFront, forceFront));
+    forceRear = Math.max(-maxRear, Math.min(maxRear, forceRear));
+
+    // the forces push the car sideways AND spin it
+    car.vx += rx * (forceFront + forceRear);
+    car.vy += ry * (forceFront + forceRear);
+    car.omega += (A * forceFront - B * forceRear) / INERTIA;
+    car.omega *= 0.98; 
+    car.angle += car.omega;
+
+    // engine brake and drag along the forward direction
+    let accel = 0;
+    if (keys["ArrowUp"]) accel += 0.2;
+    if (keys["ArrowDown"]) accel -= vf > 0.2 ? 0.25 : 0.08;
+    accel -= vf * 0.02; 
+    if (handbreak) accel -= vf * 0.03;
+    car.vx += fx * accel;
+    car.vy += fy * accel;
+
+    //top speed
+    const speed = Math.hypot(car.vx, car.vy);
+    if (speed > MAX_SPEED) {
+        car.vx *= MAX_SPEED / speed;
+        car.vy *= MAX_SPEED / speed;
     }
 
-    car.x += Math.cos(car.angle) * car.speed;
-    car.y += Math.sin(car.angle) * car.speed;
-    if (car.speed > MAX_SPEED) car.speed = MAX_SPEED;
-    if (car.speed < -MAX_SPEED / 2) car.speed = -MAX_SPEED / 2;
-    if (car.x < 0) { car.x = 0; car.speed = 0; }
-    if (car.x > WORLD_SIZE) { car.x = WORLD_SIZE; car.speed = 0; }
-    if (car.y < 0) { car.y = 0; car.speed = 0; }
-    if (car.y > WORLD_SIZE) { car.y = WORLD_SIZE; car.speed = 0; }
+    car.x += car.vx;
+    car.y += car.vy;
+
+    //walls
+    if (car.x < 0) { car.x = 0; car.vx = 0; }
+    if (car.x > WORLD_SIZE) { car.x = WORLD_SIZE; car.vx = 0; }
+    if (car.y < 0) { car.y = 0; car.vy = 0; }
+    if (car.y > WORLD_SIZE) { car.y = WORLD_SIZE; car.vy = 0; } 
 }
+
 
 function drawGround() {
     ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
@@ -70,7 +124,7 @@ function drawRace() {
 
     ctx.fillStyle = "white";
     ctx.font = "20px sans-serif";
-    ctx.fillText("Speed: " + Math.round(car.speed * 20) + " km/h", 20, 30);
+    ctx.fillText("Speed: " + Math.round(Math.hypot(car.vx, car.vy) * 20) + " km/h", 20, 30);
 
 }
 
@@ -78,7 +132,10 @@ function resetCar() {
     car.x = 1500;
     car.y = 1500;
     car.angle = 0;
-    car.speed = 0;
+    car.vx = 0;
+    car.vy = 0;
+    car.omega = 0;
+    car.steerAngle = 0;
 }
 
 window.addEventListener("keydown", (e) => {
