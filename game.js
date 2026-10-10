@@ -1,5 +1,6 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+const MAX_SPEED = 6;
 
 const car = { x: 400, y:300, angle: 0, speed: 0 };
 const keys = {};
@@ -19,6 +20,9 @@ function update() {
 
     car.x += Math.cos(car.angle) * car.speed;
     car.y += Math.sin(car.angle) * car.speed;
+    if (car.speed > MAX_SPEED) car.speed = MAX_SPEED;
+    if (car.speed < -MAX_SPEED / 2) car.speed = -MAX_SPEED / 2;
+
 }
 
 function draw() {
