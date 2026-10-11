@@ -7,12 +7,20 @@ const B = 15;                       // distance from car center to rear axle
 const INERTIA = 225;                // how hard the car is to rotate
 const CORNERING = 0.25;             // how quickly tires build up sideways force
 const MAX_TIRE = 0.3;               // the grip limit of one tire
-let surfaceGRIP = 0.7;                // 1 = tarmac, 0.7 = gravel, 0.5 = mud, 0.3 = ice
+let surfaceGRIP = 0.1;                // 1 = tarmac, 0.7 = gravel, 0.5 = mud, 0.3 = ice
 
 const car = { x: 1500, y:1500, angle: 0, vx: 0, vy: 0, omega: 0, steerAngle: 0 };
 const keys = {};
 let state = "menu";
-const maps = ["Gravel Valley", "Forest Run", "Desert Dash"];
+const maps = [
+    { name: "Gravel Valley", grip: 0.7, color: "#8a7a5a", zones: [
+        { x: 1800, y: 1300, w: 500, h:400, grip: 0.3, color: "#a8d8ea"}
+    ]},
+    { name: "Forest Run", grip: 0.5, color: "#3a5a2a", zones: [] },
+    { name: "Desert Dash", grip: 0.6, color: "#c2a35a", zones: [] },
+    { name: "Coast Road", grip: 1, color: "#444444", zones: [] }
+
+];
 let selectedMap = 0;
 
 
@@ -22,7 +30,19 @@ window.addEventListener("keydown", (e) => {{
 }});
 window.addEventListener("keyup", (e) => keys[e.key] = false);
 
+
+function getSurfaceGrip() {
+    const map = maps[selectedMap];
+    for (const z of map.zones) {
+        if (car.x >= z.x && car.x <= z.x + z.w && car.y >= z.y && car.y <= z.y + z.h) {
+            return z.grip;
+        }
+    }
+    return map.grip;
+}
+
 function updateRace() {
+    surfaceGRIP = getSurfaceGrip();
     const fx = Math.cos(car.angle);
     const fy = Math.sin(car.angle);
     const rx = -fy;
@@ -88,6 +108,13 @@ function updateRace() {
 
 
 function drawGround() {
+    ctx.fillStyle = maps[selectedMap].color;
+    ctx.fillRect(0, 0, WORLD_SIZE, WORLD_SIZE);
+    for (const z of maps[selectedMap].zones) {
+        ctx.fillStyle = z.color;
+        ctx.fillRect(z.x, z.y, z.w, z.h);
+    }
+    
     ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
     for (let x = 0; x <= WORLD_SIZE; x += 100) {
         ctx.beginPath();
@@ -114,10 +141,31 @@ function drawRace() {
 
     // the car
     ctx.save();
-    ctx.translate(car.x, car.y);
+    ctx. translate(car.x, car.y);
     ctx.rotate(car.angle);
+
+    //wheels (drawn first so the body covers their inner edge)
+    ctx.fillStyle = "#111"
+    ctx.fillRect(-16, -13, 9, 4);
+    ctx.fillRect(7, -13, 9, 4);
+    ctx.fillRect(-16, 9, 9, 4);
+    ctx.fillRect(7, 9, 9, 4);
+
+    // body
     ctx.fillStyle = "red";
     ctx.fillRect(-20, -10, 40, 20);
+
+    // windscreen and roof
+    ctx.fillStyle = "#222"
+    ctx.fillRect(2, -8, 9, 16);
+    ctx.fillStyle = "#b00000";
+    ctx.fillRect(-9, -8, 11, 16);
+
+    //headlights
+    ctx.fillStyle = "yellow";
+    ctx.fillRect(18, -8, 2, 4);
+    ctx.fillRect(18, 4, 2, 4);
+    
     ctx.restore();
 
     ctx.restore();
@@ -168,7 +216,7 @@ function drawMapSelect() {
     ctx.font = "28px sans-serif";
     ctx.fillText("SELECT STAGE", canvas.width / 2, 120);
     ctx.font = "bold 48px sans-serif";
-    ctx.fillText(maps[selectedMap], canvas.width / 2, 300);
+    ctx.fillText(maps[selectedMap].name, canvas.width / 2, 300);
     ctx.font = "20px sans-serif";
     ctx.fillText("< LEFT / RIGHT >      ENTER to drive      ESC to go back", canvas.width / 2, 400);
     ctx.textAlign = "left";
